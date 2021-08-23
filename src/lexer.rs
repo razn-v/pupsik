@@ -184,7 +184,6 @@ impl Lexer {
         // Parse integer/float
         let kind;
         if self.current_token().contains('.') {
-            println!("{}", self.current_token());
             let float = match self.current_token().parse::<f64>() {
                 Ok(f) => f,
                 Err(_) => return Err(LexerError::InvalidFloat),
