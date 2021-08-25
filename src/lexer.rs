@@ -4,7 +4,7 @@ use crate::token::{
     LiteralKind, OperatorKind, ReservedKind, SeparatorKind, Token,
 };
 
-/// The lexer convert a given `input` to tokens later used by the parser.
+/// The lexer converts a given `input` to tokens later used by the parser.
 /// It is the verify first process of our compiler.
 pub struct Lexer {
     input: String,
@@ -14,10 +14,10 @@ pub struct Lexer {
     token_pos: usize,
 }
 
-/// A list specifying categories of lexer error
+/// A list specifying categories of lex error
 #[derive(Debug)]
-pub enum LexerError {
-    /// End of file/input
+pub enum LexError {
+    /// End of input
     EOF,
     /// The token couldn't be recognized
     InvalidToken,
@@ -29,7 +29,7 @@ pub enum LexerError {
     InvalidFloat,
 }
 
-type LexerResult = Result<Token, LexerError>;
+type LexResult = Result<Token, LexError>;
 
 impl Lexer {
     pub fn new(input: String) -> Self {
@@ -61,13 +61,13 @@ impl Lexer {
     }
 
     /// Returns the next lexed token
-    fn next_token(&mut self) -> LexerResult {
+    fn next_token(&mut self) -> LexResult {
         // Unlike `pos`, `token_pos` will not be updated until the next token,
         // thus allow us to know the start and the end of the token.
         self.token_pos = self.pos;
 
         if self.is_eof() {
-            return Err(LexerError::EOF);
+            return Err(LexError::EOF);
         } else if self.is_space() {
             // Skip space
             self.next_char(true);
@@ -84,11 +84,11 @@ impl Lexer {
             return self.consume_number();
         }
 
-        Err(LexerError::InvalidToken)
+        Err(LexError::InvalidToken)
     }
 
-    /// Lex current chars into an identifier or a reserved keyword
-    fn consume_keyword(&mut self) -> LexerResult {
+    /// Lexes current chars into an identifier, a reserved keyword or a boolean
+    fn consume_keyword(&mut self) -> LexResult {
         // Get the next char until the end of the keyword
         while self.is_letter() || self.is_digit() {
             if self.next_char(true).is_none() {
@@ -100,13 +100,24 @@ impl Lexer {
         // If the keyword is reserved
         if let Ok(kind) = ReservedKind::try_from(self.current_token()) {
             return Ok(Token::Reserved(kind));
+        } else {
+            // Check if the keyword is a boolean
+            match self.current_token().as_ref() {
+                "true" => {
+                    return Ok(Token::Literal(LiteralKind::Boolean(true)))
+                }
+                "false" => {
+                    return Ok(Token::Literal(LiteralKind::Boolean(false)))
+                }
+                _ => {}
+            }
         }
 
         Ok(Token::Identifier(self.current_token()))
     }
 
-    /// Lex current chars into a separator
-    fn consume_separator(&mut self) -> LexerResult {
+    /// Lexes current chars into a separator
+    fn consume_separator(&mut self) -> LexResult {
         // Skip separator
         self.next_char(true);
 
@@ -119,8 +130,8 @@ impl Lexer {
         Ok(Token::Separator(kind))
     }
 
-    /// Lex current chars into an operator
-    fn consume_operator(&mut self) -> LexerResult {
+    /// Lexes current chars into an operator
+    fn consume_operator(&mut self) -> LexResult {
         let previous_char = self.current_char().unwrap();
 
         // Skip first character and check for 2-characters long operator
@@ -136,8 +147,8 @@ impl Lexer {
         Ok(Token::Operator(kind))
     }
 
-    /// Lex current chars into a string
-    fn consume_string(&mut self) -> LexerResult {
+    /// Lexes current chars into a string
+    fn consume_string(&mut self) -> LexResult {
         // Skip first quote
         self.next_char(true);
 
@@ -151,7 +162,7 @@ impl Lexer {
             } else if self.current_char().is_none() {
                 // We hit the end of the input without finding the end of the
                 // string
-                return Err(LexerError::InvalidString);
+                return Err(LexError::InvalidString);
             } else {
                 self.next_char(true);
             }
@@ -171,8 +182,8 @@ impl Lexer {
         Ok(Token::Literal(kind))
     }
 
-    /// Lex current chars into either a float or an integer
-    fn consume_number(&mut self) -> LexerResult {
+    /// Lexes current chars into either a float or an integer
+    fn consume_number(&mut self) -> LexResult {
         // Get the next char until the end of the number
         while self.is_digit() || self.current_char() == Some('.') {
             if self.next_char(true).is_none() {
@@ -186,13 +197,13 @@ impl Lexer {
         if self.current_token().contains('.') {
             let float = match self.current_token().parse::<f64>() {
                 Ok(f) => f,
-                Err(_) => return Err(LexerError::InvalidFloat),
+                Err(_) => return Err(LexError::InvalidFloat),
             };
             kind = LiteralKind::Float(float);
         } else {
             let int = match self.current_token().parse::<i64>() {
                 Ok(i) => i,
-                Err(_) => return Err(LexerError::InvalidInteger),
+                Err(_) => return Err(LexError::InvalidInteger),
             };
             kind = LiteralKind::Integer(int);
         }
@@ -212,9 +223,11 @@ impl Lexer {
         self.current_char().unwrap() == ' '
     }
 
-    /// Returns true if the current char is a letter from the alphabet
+    /// Returns true if the current char is a letter from the alphabet or is an
+    /// underscore
     fn is_letter(&self) -> bool {
-        self.current_char().unwrap().is_ascii_alphabetic()
+        let chr = self.current_char().unwrap();
+        chr.is_ascii_alphabetic() || chr == '_'
     }
 
     /// Returns true if the current char is a separator
@@ -231,7 +244,7 @@ impl Lexer {
     }
 
     /// Returns true if the current char is either a mathematical operator, a
-    /// bitwise operator, a logical operator or an assignment operator
+    /// bitwise operator, a logical operator or more
     fn is_operator(&self) -> bool {
         // Because we don't have an operator whom the first character is not a
         // valid operator in our language, we don't need the remaining
@@ -251,12 +264,12 @@ impl Lexer {
 }
 
 impl Iterator for Lexer {
-    type Item = LexerResult;
+    type Item = LexResult;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_token() {
-            Ok(token) => return Some(Ok(token)),
-            Err(LexerError::EOF) => return None,
+            Ok(token) => Some(Ok(token)),
+            Err(LexError::EOF) => None,
             Err(err) => panic!("{:?}", err),
         }
     }

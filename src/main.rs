@@ -1,8 +1,11 @@
 mod lexer;
+mod node;
+mod parser;
 mod token;
 
 use std::io::BufRead;
 
+use crate::parser::Parser;
 use lexer::Lexer;
 
 fn main() {
@@ -12,8 +15,12 @@ fn main() {
     for line in stdin.lock().lines() {
         let line = line.expect("Couldn't read input.");
 
-        for token in Lexer::new(line) {
-            println!("{:?}", token);
+        // Collect lexer output
+        let tokens = Lexer::new(line).into_iter().map(|x| x.unwrap()).collect();
+
+        // Call parser with lexer output and iterate over the result
+        for func in Parser::new(tokens) {
+            println!("{:?}", func);
         }
     }
 }
