@@ -92,7 +92,7 @@ impl Parser {
                 expect_token!(self, Token::Identifier(x) => x.clone());
             self.next_token();
 
-            if arg_type == "Void" {
+            if arg_type == "void" {
                 // Void arguments have no name and can't be more than one
                 expect_token!(self,
                     Token::Separator(SeparatorKind::Arrow) => ());
