@@ -1,13 +1,16 @@
-use std::convert::TryFrom;
-
+use crate::error::CompileError;
 use crate::token::{
     LiteralKind, OperatorKind, ReservedKind, SeparatorKind, Token,
 };
+use crate::TraceInfo;
+
+use std::convert::TryFrom;
+use std::ops::Deref;
 
 /// The lexer converts a given `input` to tokens later used by the parser.
 /// It is the verify first process of our compiler.
-pub struct Lexer {
-    input: String,
+pub struct Lexer<'a> {
+    input: &'a Vec<TraceInfo<char>>,
     /// Position of the lexer in `input`
     pos: usize,
     /// Position of the current token in `input`
@@ -29,10 +32,33 @@ pub enum LexError {
     InvalidFloat,
 }
 
+impl CompileError for LexError {
+    fn error_msg(&self) -> String {
+        match self {
+            LexError::InvalidToken => {
+                "This character couldn't be recognized as a valid token"
+            }
+            LexError::InvalidString => {
+                "This string has no end. Did you forget a quote?"
+            }
+            LexError::InvalidInteger => "Couldn't parse this as an integer",
+            LexError::InvalidFloat => "Couldn't parse this as a float",
+            LexError::EOF => unreachable!(),
+        }
+        .into()
+    }
+}
+
+impl std::fmt::Display for LexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 type LexResult = Result<Token, LexError>;
 
-impl Lexer {
-    pub fn new(input: String) -> Self {
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a Vec<TraceInfo<char>>) -> Self {
         Self {
             input,
             pos: 0,
@@ -40,14 +66,37 @@ impl Lexer {
         }
     }
 
+    /// Get trace info of `value`
+    fn get_trace<T>(&self, value: T) -> TraceInfo<T> {
+        // In certains cases, the position of the lexer will be at the character
+        // that couldn't be lexed, this is why we also need to check the
+        // calculated length later one
+        let char_info = match self.input.get(self.token_pos) {
+            Some(info) => info,
+            None => self.input.get(self.token_pos - 1).unwrap(),
+        };
+
+        // Make sure the length is not zero
+        let length = match self.pos - self.token_pos {
+            0 => 1,
+            n => n,
+        };
+
+        TraceInfo::new(value, char_info.n_line, char_info.pos, length)
+    }
+
     /// Returns the currently processed character
     fn current_char(&self) -> Option<char> {
-        self.input.chars().nth(self.pos)
+        self.input.get(self.pos).map(|x| *x.deref())
     }
 
     /// Returns the value of the currently processed token
     fn current_token(&self) -> String {
-        self.input[self.token_pos..self.pos].to_string()
+        self.input
+            [self.token_pos..self.pos + (self.token_pos == self.pos) as usize]
+            .into_iter()
+            .map(|x| x.deref())
+            .collect()
     }
 
     /// Returns the next character and increases the position of the lexer if
@@ -57,7 +106,7 @@ impl Lexer {
             self.pos += 1;
             return self.current_char();
         }
-        self.input.chars().nth(self.pos + 1)
+        self.input.get(self.pos + 1).map(|x| *x.deref())
     }
 
     /// Returns the next lexed token
@@ -263,14 +312,14 @@ impl Lexer {
     }
 }
 
-impl Iterator for Lexer {
-    type Item = LexResult;
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Result<TraceInfo<Token>, TraceInfo<LexError>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_token() {
-            Ok(token) => Some(Ok(token)),
             Err(LexError::EOF) => None,
-            Err(err) => panic!("{:?}", err),
+            Ok(token) => Some(Ok(self.get_trace(token))),
+            Err(err) => Some(Err(self.get_trace(err))),
         }
     }
 }

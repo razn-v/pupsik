@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
 /// Tokens are high-level identifiers used by the parser to generate ASTs
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     /// Variables, types and other
     Identifier(String),
@@ -16,11 +16,21 @@ pub enum Token {
     Literal(LiteralKind),
 }
 
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 /// A list specifying categories of reserved keyword
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ReservedKind {
+    VariableType(TypeKind),
     FunctionDecl,
     Return,
+    If,
+    Else,
+    Let,
 }
 
 impl TryFrom<String> for ReservedKind {
@@ -29,15 +39,29 @@ impl TryFrom<String> for ReservedKind {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         #[rustfmt::skip]
         return match value.as_ref() {
-            "fnc" => Ok(Self::FunctionDecl),
+            "void"   => Ok(Self::VariableType(TypeKind::Void)),
+            "int64"  => Ok(Self::VariableType(TypeKind::Int64)),
+            "bool"   => Ok(Self::VariableType(TypeKind::Bool)),
+            "fnc"    => Ok(Self::FunctionDecl),
             "return" => Ok(Self::Return),
-            _     => Err(()),
+            "if"     => Ok(Self::If),
+            "else"   => Ok(Self::Else),
+            "let"    => Ok(Self::Let),
+            _        => Err(()),
         };
     }
 }
 
+/// A list specifying categories of variable type
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeKind {
+    Void,
+    Int64,
+    Bool,
+}
+
 /// A list specifying categories of separator
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SeparatorKind {
     Comma,
     Colon,
@@ -152,7 +176,7 @@ impl TryFrom<String> for OperatorKind {
 }
 
 /// A list specifying categories of literal
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LiteralKind {
     String(String),
     Integer(i64),

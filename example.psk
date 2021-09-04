@@ -1,0 +1,4 @@
+fnc main: void -> int64 {
+    let var = true;
+    return var;
+}

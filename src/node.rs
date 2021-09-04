@@ -1,5 +1,7 @@
-use crate::token::OperatorKind;
-use std::fmt::Debug;
+use crate::token::{OperatorKind, TypeKind};
+use crate::TraceInfo;
+
+type NodeBlock = Vec<TraceInfo<Box<TreeNode>>>;
 
 /// A list specifying categories of instructions and types used by the language
 #[derive(Debug, Clone)]
@@ -7,18 +9,27 @@ pub enum TreeNode {
     FunctionDecl {
         name: String,
         // (argument type, argument name)
-        args: Vec<(String, String)>,
-        ret: String,
-        body: Vec<Box<TreeNode>>,
+        args: Vec<(TypeKind, String)>,
+        ret: TypeKind,
+        body: NodeBlock,
     },
 
     BinaryOp {
-        op: OperatorKind,
-        left: Box<TreeNode>,
-        right: Box<TreeNode>,
+        operator: OperatorKind,
+        left: TraceInfo<Box<TreeNode>>,
+        right: TraceInfo<Box<TreeNode>>,
     },
 
-    Return(Box<TreeNode>),
+    Return(Option<TraceInfo<Box<TreeNode>>>),
+    Condition {
+        cond: TraceInfo<Box<TreeNode>>,
+        then_body: NodeBlock,
+        else_body: NodeBlock,
+    },
+    VariableDecl {
+        name: String,
+        value: TraceInfo<Box<TreeNode>>,
+    },
 
     String(String),
     Integer(i64),
@@ -28,6 +39,6 @@ pub enum TreeNode {
     VarCall(String),
     FunctionCall {
         name: String,
-        args: Vec<Box<TreeNode>>,
+        args: Vec<TraceInfo<Box<TreeNode>>>,
     },
 }

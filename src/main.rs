@@ -1,26 +1,91 @@
+mod codegen;
+mod error;
 mod lexer;
 mod node;
 mod parser;
 mod token;
 
+use crate::codegen::Codegen;
+use crate::error::ErrorManager;
+use crate::error::TraceInfo;
+use crate::parser::Parser;
+use crate::token::Token;
+
+use inkwell::context::Context;
+use inkwell::values::AnyValue;
+
+use lexer::Lexer;
+use std::fs::File;
 use std::io::BufRead;
 
-use crate::parser::Parser;
-use lexer::Lexer;
+/// Returns the contained [`Ok`] value or returns error contained in [`Err`]
+#[macro_export]
+macro_rules! unwrap_or_return {
+    ($item:expr) => {
+        match $item {
+            Ok(x) => x,
+            Err(err) => return Err(err),
+        }
+    };
+}
 
 fn main() {
-    let stdin = std::io::stdin();
+    let args: Vec<String> = std::env::args().collect();
 
-    // Read input line by line
-    for line in stdin.lock().lines() {
-        let line = line.expect("Couldn't read input.");
+    // If file is not specified
+    if args.len() == 1 {
+        println!("Usage: {} <file>", args[0]);
+        std::process::exit(1);
+    }
 
-        // Collect lexer output
-        let tokens = Lexer::new(line).into_iter().map(|x| x.unwrap()).collect();
+    // Read file lines
+    let filename = &args[1];
+    let file = File::open(filename).expect("Couldn't open file.");
+    let lines: Vec<String> = std::io::BufReader::new(file)
+        .lines()
+        .map(|line| line.expect("Couldn't read line."))
+        .collect();
 
-        // Call parser with lexer output and iterate over the result
-        for func in Parser::new(tokens) {
-            println!("{:?}", func);
+    let err_manager = ErrorManager::new(filename, &lines);
+    let context = Context::create();
+    let mut codegen = Codegen::new(&context, "main_mod");
+
+    // Lex each line and save tokens
+    let mut tokens: Vec<TraceInfo<Token>> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        // Trace each character
+        let traced_line: Vec<TraceInfo<char>> = line
+            .chars()
+            .enumerate()
+            .map(|(j, chr)| TraceInfo::new(chr, i, j, 1))
+            .collect();
+
+        for token in Lexer::new(&traced_line) {
+            if token.is_err() {
+                report_error!(err_manager, token.unwrap_err());
+            }
+            tokens.push(token.unwrap());
         }
     }
+
+    // Parse tokens into top-level instructions
+    for toplevel in Parser::new(&tokens) {
+        if toplevel.is_err() {
+            report_error!(err_manager, toplevel.unwrap_err());
+        }
+
+        // Compile each function (for now we only support functions)
+        match codegen.compile_func(&toplevel.unwrap()) {
+            Ok(res) => println!(
+                "{}",
+                res.print_to_string().to_string().replace("\\n", "\n")
+            ),
+            Err(err) => {
+                report_error!(err_manager, err);
+            }
+        }
+    }
+
+    // Compile LLVM IR to binary file
+    codegen.write_to_file("./prog.o", "./prog");
 }
