@@ -1,6 +1,6 @@
 use crate::error::CompileError;
 use crate::node::TreeNode;
-use crate::token::{OperatorKind, TypeKind};
+use crate::token::{BinaryKind, TypeKind, UnaryKind};
 use crate::{unwrap_or_return, TraceInfo};
 
 use inkwell::builder::Builder;
@@ -426,39 +426,64 @@ impl<'ctx> Codegen<'ctx> {
 
                 // Build instruction
                 match operator {
-                    OperatorKind::Add => Ok(self
+                    BinaryKind::Add => Ok(self
                         .builder
                         .build_int_add(left_hand, right_hand, "add")
                         .as_basic_value_enum()),
-                    OperatorKind::Sub => Ok(self
+                    BinaryKind::Sub => Ok(self
                         .builder
                         .build_int_sub(left_hand, right_hand, "sub")
                         .as_basic_value_enum()),
-                    OperatorKind::Mul => Ok(self
+                    BinaryKind::Mul => Ok(self
                         .builder
                         .build_int_mul(left_hand, right_hand, "mul")
                         .as_basic_value_enum()),
-                    OperatorKind::Div => Ok(self
+                    BinaryKind::Div => Ok(self
                         .builder
                         .build_int_signed_div(left_hand, right_hand, "div")
                         .as_basic_value_enum()),
-                    OperatorKind::Mod => Ok(self
+                    BinaryKind::Mod => Ok(self
                         .builder
                         .build_int_signed_rem(left_hand, right_hand, "rem")
                         .as_basic_value_enum()),
-                    OperatorKind::Eq
-                    | OperatorKind::Not
-                    | OperatorKind::Greater
-                    | OperatorKind::GreaterEq
-                    | OperatorKind::Less
-                    | OperatorKind::LessEq => {
+                    BinaryKind::BitAnd => Ok(self
+                        .builder
+                        .build_and(left_hand, right_hand, "bitand")
+                        .as_basic_value_enum()),
+                    BinaryKind::BitOr => Ok(self
+                        .builder
+                        .build_or(left_hand, right_hand, "bitor")
+                        .as_basic_value_enum()),
+                    BinaryKind::BitXor => Ok(self
+                        .builder
+                        .build_xor(left_hand, right_hand, "bitxor")
+                        .as_basic_value_enum()),
+                    BinaryKind::BitLShift => Ok(self
+                        .builder
+                        .build_left_shift(left_hand, right_hand, "bitlshift")
+                        .as_basic_value_enum()),
+                    BinaryKind::BitRShift => Ok(self
+                        .builder
+                        .build_right_shift(
+                            left_hand,
+                            right_hand,
+                            false,
+                            "bitrshift",
+                        )
+                        .as_basic_value_enum()),
+                    BinaryKind::Eq
+                    | BinaryKind::NotEq
+                    | BinaryKind::Greater
+                    | BinaryKind::GreaterEq
+                    | BinaryKind::Less
+                    | BinaryKind::LessEq => {
                         let predicate = match operator {
-                            OperatorKind::Eq => IntPredicate::EQ,
-                            OperatorKind::Not => IntPredicate::NE,
-                            OperatorKind::Greater => IntPredicate::UGT,
-                            OperatorKind::GreaterEq => IntPredicate::UGE,
-                            OperatorKind::Less => IntPredicate::ULT,
-                            OperatorKind::LessEq => IntPredicate::ULE,
+                            BinaryKind::Eq => IntPredicate::EQ,
+                            BinaryKind::NotEq => IntPredicate::NE,
+                            BinaryKind::Greater => IntPredicate::UGT,
+                            BinaryKind::GreaterEq => IntPredicate::UGE,
+                            BinaryKind::Less => IntPredicate::ULT,
+                            BinaryKind::LessEq => IntPredicate::ULE,
                             _ => unreachable!(),
                         };
 
@@ -470,6 +495,21 @@ impl<'ctx> Codegen<'ctx> {
                             .as_basic_value_enum())
                     }
                     _ => todo!(),
+                }
+            }
+            TreeNode::UnaryOp { operator, value } => {
+                let value = unwrap_or_return!(self.compile_expr(value))
+                    .into_int_value();
+
+                match operator {
+                    UnaryKind::BitNot => Ok(self
+                        .builder
+                        .build_not(value, "bitnot")
+                        .as_basic_value_enum()),
+                    UnaryKind::Not => Ok(self
+                        .builder
+                        .build_int_neg(value, "neg")
+                        .as_basic_value_enum()),
                 }
             }
             TreeNode::String(string) => Ok(self

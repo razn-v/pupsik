@@ -1,7 +1,8 @@
 use crate::error::CompileError;
 use crate::node::TreeNode;
 use crate::token::{
-    LiteralKind, OperatorKind, ReservedKind, SeparatorKind, Token, TypeKind,
+    BinaryKind, LiteralKind, OperatorKind, ReservedKind, SeparatorKind, Token,
+    TypeKind,
 };
 use crate::{unwrap_or_return, TraceInfo};
 
@@ -277,6 +278,9 @@ impl<'a> Parser<'a> {
             Some(Token::Separator(SeparatorKind::OpenParen)) => {
                 self.parse_paren_expr()
             }
+            Some(Token::Operator(OperatorKind::UnaryOperator(_))) => {
+                self.parse_unop()
+            }
             _ => Err(self.get_trace(ParseError::UnexpectedToken)),
         };
 
@@ -379,8 +383,10 @@ impl<'a> Parser<'a> {
     ) -> ParseResult {
         loop {
             // Make sure we have a binary operator, otherwise return left hand
-            let binop: OperatorKind = match self.current_token() {
-                Some(Token::Operator(op)) => op.clone(),
+            let binop: BinaryKind = match self.current_token() {
+                Some(Token::Operator(OperatorKind::BinaryOperator(op))) => {
+                    op.clone()
+                }
                 _ => return Ok(left_hand.clone()),
             };
 
@@ -394,7 +400,9 @@ impl<'a> Parser<'a> {
             let mut right_hand = unwrap_or_return!(self.parse_primary());
 
             let next_prec: isize = match self.current_token() {
-                Some(Token::Operator(op)) => op.get_precedence(),
+                Some(Token::Operator(OperatorKind::BinaryOperator(op))) => {
+                    op.get_precedence()
+                }
                 _ => -1,
             };
             if tok_prec < next_prec {
@@ -412,6 +420,20 @@ impl<'a> Parser<'a> {
                 right: right_hand,
             }));
         }
+    }
+
+    /// Parses an unary operation
+    fn parse_unop(&mut self) -> ParseResult {
+        // Get operator
+        let unop = expect_token!(self, ParseError::ExpectedIdentifier,
+            Token::Operator(OperatorKind::UnaryOperator(x)) => x.clone());
+        self.next_token();
+
+        let value = unwrap_or_return!(self.parse_expr());
+        Ok(self.get_trace(Box::new(TreeNode::UnaryOp {
+            operator: unop,
+            value,
+        })))
     }
 
     /// Parses a return instruction
@@ -461,7 +483,9 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         // Make sure we have an assign operator
-        expect_token!(self, Token::Operator(OperatorKind::Assign) => ());
+        expect_token!(self,
+            Token::Operator(OperatorKind::BinaryOperator(BinaryKind::Assign))
+            => ());
         self.next_token();
 
         // Parse variable value

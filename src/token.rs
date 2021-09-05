@@ -99,6 +99,13 @@ impl TryFrom<String> for SeparatorKind {
 /// A list specifying categories of operator
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperatorKind {
+    BinaryOperator(BinaryKind),
+    UnaryOperator(UnaryKind),
+}
+
+/// A list specifying categories of binary operator
+#[derive(Debug, Clone, PartialEq)]
+pub enum BinaryKind {
     // Mathematical operators
     Add,
     Sub,
@@ -109,14 +116,12 @@ pub enum OperatorKind {
     BitAnd,
     BitOr,
     BitXor,
-    BitNot,
     BitLShift,
     BitRShift,
     // Logical operators
     Eq,
     And,
     Or,
-    Not,
     NotEq,
     Less,
     Greater,
@@ -127,23 +132,29 @@ pub enum OperatorKind {
     MemberAccess,
 }
 
-impl OperatorKind {
+impl BinaryKind {
     pub fn get_precedence(&self) -> isize {
         match self {
-            Self::Not | Self::BitNot => 1,
-            Self::Mul | Self::Div | Self::Mod => 2,
-            Self::Add | Self::Sub => 3,
-            Self::BitLShift | Self::BitRShift => 4,
-            Self::Less | Self::Greater | Self::LessEq | Self::GreaterEq => 5,
-            Self::Eq | Self::NotEq => 6,
-            Self::BitAnd => 7,
-            Self::BitXor => 8,
-            Self::BitOr => 9,
-            Self::And => 10,
-            Self::Or => 11,
+            Self::Mul | Self::Div | Self::Mod => 1,
+            Self::Add | Self::Sub => 2,
+            Self::BitLShift | Self::BitRShift => 3,
+            Self::Less | Self::Greater | Self::LessEq | Self::GreaterEq => 4,
+            Self::Eq | Self::NotEq => 5,
+            Self::BitAnd => 6,
+            Self::BitXor => 7,
+            Self::BitOr => 8,
+            Self::And => 9,
+            Self::Or => 10,
             _ => unimplemented!(),
         }
     }
+}
+
+/// A list specifying categories of unary operator
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnaryKind {
+    BitNot,
+    Not,
 }
 
 impl TryFrom<String> for OperatorKind {
@@ -152,28 +163,28 @@ impl TryFrom<String> for OperatorKind {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         #[rustfmt::skip]
         return match value.as_ref() {
-            "+"  => Ok(Self::Add),
-            "-"  => Ok(Self::Sub),
-            "*"  => Ok(Self::Mul),
-            "/"  => Ok(Self::Div),
-            "%"  => Ok(Self::Mod),
-            "&"  => Ok(Self::BitAnd),
-            "|"  => Ok(Self::BitOr),
-            "^"  => Ok(Self::BitXor),
-            "~"  => Ok(Self::BitNot),
-            "<<" => Ok(Self::BitLShift),
-            ">>" => Ok(Self::BitRShift),
-            "==" => Ok(Self::Eq),
-            "&&" => Ok(Self::And),
-            "||" => Ok(Self::Or),
-            "!"  => Ok(Self::Not),
-            "!=" => Ok(Self::NotEq),
-            "<"  => Ok(Self::Less),
-            ">"  => Ok(Self::Greater),
-            "<=" => Ok(Self::LessEq),
-            ">=" => Ok(Self::GreaterEq),
-            "="  => Ok(Self::Assign),
-            "."  => Ok(Self::MemberAccess),
+            "+"  => Ok(Self::BinaryOperator(BinaryKind::Add)),
+            "-"  => Ok(Self::BinaryOperator(BinaryKind::Sub)),
+            "*"  => Ok(Self::BinaryOperator(BinaryKind::Mul)),
+            "/"  => Ok(Self::BinaryOperator(BinaryKind::Div)),
+            "%"  => Ok(Self::BinaryOperator(BinaryKind::Mod)),
+            "&"  => Ok(Self::BinaryOperator(BinaryKind::BitAnd)),
+            "|"  => Ok(Self::BinaryOperator(BinaryKind::BitOr)),
+            "^"  => Ok(Self::BinaryOperator(BinaryKind::BitXor)),
+            "~"  => Ok(Self::UnaryOperator(UnaryKind::BitNot)),
+            "<<" => Ok(Self::BinaryOperator(BinaryKind::BitLShift)),
+            ">>" => Ok(Self::BinaryOperator(BinaryKind::BitRShift)),
+            "==" => Ok(Self::BinaryOperator(BinaryKind::Eq)),
+            "&&" => Ok(Self::BinaryOperator(BinaryKind::And)),
+            "||" => Ok(Self::BinaryOperator(BinaryKind::Or)),
+            "!"  => Ok(Self::UnaryOperator(UnaryKind::Not)),
+            "!=" => Ok(Self::BinaryOperator(BinaryKind::NotEq)),
+            "<"  => Ok(Self::BinaryOperator(BinaryKind::Less)),
+            ">"  => Ok(Self::BinaryOperator(BinaryKind::Greater)),
+            "<=" => Ok(Self::BinaryOperator(BinaryKind::LessEq)),
+            ">=" => Ok(Self::BinaryOperator(BinaryKind::GreaterEq)),
+            "="  => Ok(Self::BinaryOperator(BinaryKind::Assign)),
+            "."  => Ok(Self::BinaryOperator(BinaryKind::MemberAccess)),
             _    => Err(()),
         };
     }

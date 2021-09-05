@@ -1,4 +1,4 @@
-use crate::token::{OperatorKind, TypeKind};
+use crate::token::{BinaryKind, TypeKind, UnaryKind};
 use crate::TraceInfo;
 
 type NodeBlock = Vec<TraceInfo<Box<TreeNode>>>;
@@ -15,9 +15,14 @@ pub enum TreeNode {
     },
 
     BinaryOp {
-        operator: OperatorKind,
+        operator: BinaryKind,
         left: TraceInfo<Box<TreeNode>>,
         right: TraceInfo<Box<TreeNode>>,
+    },
+
+    UnaryOp {
+        operator: UnaryKind,
+        value: TraceInfo<Box<TreeNode>>,
     },
 
     Return(Option<TraceInfo<Box<TreeNode>>>),
