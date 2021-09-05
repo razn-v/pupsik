@@ -40,5 +40,6 @@ pub enum TreeNode {
     FunctionCall {
         name: String,
         args: Vec<TraceInfo<Box<TreeNode>>>,
+        is_extern: bool,
     },
 }

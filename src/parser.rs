@@ -236,7 +236,10 @@ impl<'a> Parser<'a> {
             Some(Token::Reserved(ReservedKind::Let)) => {
                 self.parse_var_decl()
             }
-            Some(Token::Identifier(_)) => self.parse_call(),
+            Some(Token::Identifier(_)) => self.parse_call(false),
+            Some(Token::Separator(SeparatorKind::At)) => {
+                self.parse_call(true)
+            }
             _ => todo!(),
         });
 
@@ -269,7 +272,8 @@ impl<'a> Parser<'a> {
 
         let ret = match self.current_token() {
             Some(Token::Literal(_)) => self.parse_literal(),
-            Some(Token::Identifier(_)) => self.parse_call(),
+            Some(Token::Identifier(_)) => self.parse_call(false),
+            Some(Token::Separator(SeparatorKind::At)) => self.parse_call(true),
             Some(Token::Separator(SeparatorKind::OpenParen)) => {
                 self.parse_paren_expr()
             }
@@ -303,21 +307,26 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses either a variable call or a function call
-    fn parse_call(&mut self) -> ParseResult {
+    fn parse_call(&mut self, is_extern: bool) -> ParseResult {
+        if is_extern {
+            // Skip 'at' symbol
+            self.next_token();
+        }
+
         let name = expect_token!(self,
             ParseError::ExpectedIdentifier, Token::Identifier(x) => x.clone());
         self.next_token();
 
         // Check if we have a function call
         if self.match_token(Token::Separator(SeparatorKind::OpenParen)) {
-            return self.parse_fn_call(name);
+            return self.parse_fn_call(name, is_extern);
         }
 
         Ok(self.get_trace(Box::new(TreeNode::VarCall(name))))
     }
 
     /// Parses a function call
-    fn parse_fn_call(&mut self, name: String) -> ParseResult {
+    fn parse_fn_call(&mut self, name: String, is_extern: bool) -> ParseResult {
         // Skip open parenthesis
         self.next_token();
 
@@ -340,7 +349,11 @@ impl<'a> Parser<'a> {
         // Skip close parenthesis
         self.next_token();
 
-        Ok(self.get_trace(Box::new(TreeNode::FunctionCall { name, args })))
+        Ok(self.get_trace(Box::new(TreeNode::FunctionCall {
+            name,
+            args,
+            is_extern,
+        })))
     }
 
     /// Parses a parenthesis expression

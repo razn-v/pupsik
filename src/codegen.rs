@@ -5,7 +5,7 @@ use crate::{unwrap_or_return, TraceInfo};
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::Module;
+use inkwell::module::{Linkage, Module};
 use inkwell::passes::PassManager;
 use inkwell::targets::{
     CodeModel, FileType, InitializationConfig, RelocMode, Target,
@@ -15,25 +15,12 @@ use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{
     BasicValue, BasicValueEnum, FunctionValue, InstructionValue, PointerValue,
 };
-use inkwell::IntPredicate;
-use inkwell::OptimizationLevel;
+use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 use std::process::Command;
-
-/// Check if an error was found by LLVM
-macro_rules! check_error {
-    ($self:ident, $node:ident) => {
-        if $self.module.verify().is_err() {
-            return Err($self.get_trace(
-                CodegenError::ModuleError($self.module_error()),
-                $node,
-            ));
-        }
-    };
-}
 
 /// The intermediate code generator generates LLVM IR which is then compiled
 /// into an object file and finally linked with gcc to produce the final program
@@ -168,7 +155,33 @@ impl<'ctx> Codegen<'ctx> {
             TypeKind::Bool => {
                 Ok(Some(self.context.bool_type().as_basic_type_enum()))
             }
+            TypeKind::Str => Ok(Some(
+                self.context
+                    .i8_type()
+                    .ptr_type(AddressSpace::Generic)
+                    .as_basic_type_enum(),
+            )),
         };
+    }
+
+    /// Resolves external function call
+    fn resolve_extern_func(&self, name: &str) -> Result<(), ()> {
+        match name {
+            "printf" => {
+                let str_type = self.get_type(&TypeKind::Str).unwrap().unwrap();
+                let printf_type =
+                    self.context.i32_type().fn_type(&[str_type], true);
+
+                self.module.add_function(
+                    name,
+                    printf_type,
+                    Some(Linkage::External),
+                );
+
+                Ok(())
+            }
+            _ => Err(()),
+        }
     }
 
     /// Compiles a given function's content and prototype
@@ -290,10 +303,7 @@ impl<'ctx> Codegen<'ctx> {
                 let compiled_expr = unwrap_or_return!(
                     self.compile_expr(expr.as_ref().unwrap())
                 );
-                let ret = self.builder.build_return(Some(&compiled_expr));
-                check_error!(self, node);
-
-                Ok(ret)
+                Ok(self.builder.build_return(Some(&compiled_expr)))
             }
             TreeNode::Condition {
                 cond,
@@ -310,11 +320,13 @@ impl<'ctx> Codegen<'ctx> {
                     else_bb,
                 );
 
+                // Compile each node of then body
                 self.builder.position_at_end(then_bb);
                 for node in then_body {
                     unwrap_or_return!(self.compile_node(parent, &node));
                 }
 
+                // Compile each node of else body
                 self.builder.position_at_end(else_bb);
                 for node in else_body {
                     unwrap_or_return!(self.compile_node(parent, &node));
@@ -322,7 +334,11 @@ impl<'ctx> Codegen<'ctx> {
 
                 Ok(branch)
             }
-            TreeNode::FunctionCall { name, args } => {
+            TreeNode::FunctionCall {
+                name,
+                args,
+                is_extern,
+            } => {
                 match self.module.get_function(&name) {
                     Some(func) => {
                         let mut compiled_args = Vec::with_capacity(args.len());
@@ -355,6 +371,11 @@ impl<'ctx> Codegen<'ctx> {
                         Ok(build_call.right().unwrap())
                     }
                     None => {
+                        if *is_extern && self.resolve_extern_func(name).is_ok()
+                        {
+                            return self.compile_node(parent, node);
+                        }
+
                         Err(self
                             .get_trace(CodegenError::FunctionNotFound, node))
                     }
@@ -425,18 +446,37 @@ impl<'ctx> Codegen<'ctx> {
                         .builder
                         .build_int_signed_rem(left_hand, right_hand, "rem")
                         .as_basic_value_enum()),
-                    OperatorKind::Eq => Ok(self
-                        .builder
-                        .build_int_compare(
-                            IntPredicate::EQ,
-                            left_hand,
-                            right_hand,
-                            "cmp",
-                        )
-                        .as_basic_value_enum()),
+                    OperatorKind::Eq
+                    | OperatorKind::Not
+                    | OperatorKind::Greater
+                    | OperatorKind::GreaterEq
+                    | OperatorKind::Less
+                    | OperatorKind::LessEq => {
+                        let predicate = match operator {
+                            OperatorKind::Eq => IntPredicate::EQ,
+                            OperatorKind::Not => IntPredicate::NE,
+                            OperatorKind::Greater => IntPredicate::UGT,
+                            OperatorKind::GreaterEq => IntPredicate::UGE,
+                            OperatorKind::Less => IntPredicate::ULT,
+                            OperatorKind::LessEq => IntPredicate::ULE,
+                            _ => unreachable!(),
+                        };
+
+                        Ok(self
+                            .builder
+                            .build_int_compare(
+                                predicate, left_hand, right_hand, "cmp",
+                            )
+                            .as_basic_value_enum())
+                    }
                     _ => todo!(),
                 }
             }
+            TreeNode::String(string) => Ok(self
+                .builder
+                .build_global_string_ptr(string, "str")
+                .as_pointer_value()
+                .as_basic_value_enum()),
             TreeNode::Integer(int) => Ok(self
                 .context
                 .i64_type()
@@ -453,7 +493,11 @@ impl<'ctx> Codegen<'ctx> {
                     Err(self.get_trace(CodegenError::VariableNotFound, expr))
                 }
             },
-            TreeNode::FunctionCall { name, args } => {
+            TreeNode::FunctionCall {
+                name,
+                args,
+                is_extern,
+            } => {
                 match self.module.get_function(&name) {
                     Some(func) => {
                         let mut compiled_args = Vec::with_capacity(args.len());
@@ -480,6 +524,11 @@ impl<'ctx> Codegen<'ctx> {
                         Ok(instr.unwrap())
                     }
                     None => {
+                        if *is_extern && self.resolve_extern_func(name).is_ok()
+                        {
+                            return self.compile_expr(expr);
+                        }
+
                         Err(self
                             .get_trace(CodegenError::FunctionNotFound, expr))
                     }

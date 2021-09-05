@@ -62,9 +62,15 @@ impl<'a> ErrorManager<'a> {
     pub fn report_error<T: CompileError>(&self, error: TraceInfo<T>) {
         let mut error = error;
         // Space before vertical bar
-        let padding = error.n_line.to_string().len() + 2;
+        let padding = 2 * error.n_line.to_string().len() + 1;
         // The line where the error occured
-        let line = self.lines.get(error.n_line).unwrap();
+        let mut line = self.lines.get(error.n_line).unwrap().clone();
+
+        // Truncate error length if overflowing
+        if error.len > line.len() {
+            line.push_str(" ...");
+            error.len = line.len();
+        }
 
         // Calculate the number of spaces in the slice of code to avoid wrong
         // formatting

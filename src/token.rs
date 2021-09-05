@@ -42,6 +42,7 @@ impl TryFrom<String> for ReservedKind {
             "void"   => Ok(Self::VariableType(TypeKind::Void)),
             "int64"  => Ok(Self::VariableType(TypeKind::Int64)),
             "bool"   => Ok(Self::VariableType(TypeKind::Bool)),
+            "str"    => Ok(Self::VariableType(TypeKind::Str)),
             "fnc"    => Ok(Self::FunctionDecl),
             "return" => Ok(Self::Return),
             "if"     => Ok(Self::If),
@@ -58,6 +59,7 @@ pub enum TypeKind {
     Void,
     Int64,
     Bool,
+    Str,
 }
 
 /// A list specifying categories of separator
@@ -71,6 +73,7 @@ pub enum SeparatorKind {
     OpenBrace,
     CloseBrace,
     Arrow,
+    At,
 }
 
 impl TryFrom<String> for SeparatorKind {
@@ -87,6 +90,7 @@ impl TryFrom<String> for SeparatorKind {
             "{"  => Ok(Self::OpenBrace),
             "}"  => Ok(Self::CloseBrace),
             "->" => Ok(Self::Arrow),
+            "@"  => Ok(Self::At),
             _    => Err(()),
         };
     }

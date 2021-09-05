@@ -12,9 +12,8 @@ use crate::parser::Parser;
 use crate::token::Token;
 
 use inkwell::context::Context;
-use inkwell::values::AnyValue;
-
 use lexer::Lexer;
+
 use std::fs::File;
 use std::io::BufRead;
 
@@ -75,14 +74,8 @@ fn main() {
         }
 
         // Compile each function (for now we only support functions)
-        match codegen.compile_func(&toplevel.unwrap()) {
-            Ok(res) => println!(
-                "{}",
-                res.print_to_string().to_string().replace("\\n", "\n")
-            ),
-            Err(err) => {
-                report_error!(err_manager, err);
-            }
+        if let Err(err) = codegen.compile_func(&toplevel.unwrap()) {
+            report_error!(err_manager, err);
         }
     }
 
