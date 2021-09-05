@@ -164,6 +164,20 @@ impl<'ctx> Codegen<'ctx> {
         };
     }
 
+    /// Stores a variable with a `name` and `value`
+    fn create_var(
+        &mut self,
+        name: &str,
+        value: BasicValueEnum<'ctx>,
+    ) -> InstructionValue<'ctx> {
+        // Create pointer
+        let ptr = self.builder.build_alloca(value.get_type(), name);
+        // Save variable
+        self.variables.insert(name.to_string(), ptr);
+        // Store argument in the pointer
+        self.builder.build_store(ptr, value)
+    }
+
     /// Resolves external function call
     fn resolve_extern_func(&self, name: &str) -> Result<(), ()> {
         match name {
@@ -219,13 +233,7 @@ impl<'ctx> Codegen<'ctx> {
         // Build each argument of the function
         for (i, arg) in fn_proto.get_param_iter().enumerate() {
             let arg_name = &fn_args[i].1;
-
-            // Create pointer
-            let ptr = self.builder.build_alloca(arg.get_type(), arg_name);
-            // Store argument in the pointer
-            self.builder.build_store(ptr, arg);
-            // Save variable
-            self.variables.insert(arg_name.clone(), ptr);
+            self.create_var(arg_name, arg);
         }
 
         // Compile each node (line) of the function
@@ -310,12 +318,13 @@ impl<'ctx> Codegen<'ctx> {
                 then_body,
                 else_body,
             } => {
-                let compiled_cond = unwrap_or_return!(self.compile_expr(cond));
+                let compiled_cond =
+                    unwrap_or_return!(self.compile_expr(cond)).into_int_value();
                 let then_bb = self.context.append_basic_block(*parent, "then");
                 let else_bb = self.context.append_basic_block(*parent, "else");
 
                 let branch = self.builder.build_conditional_branch(
-                    compiled_cond.into_int_value(),
+                    compiled_cond,
                     then_bb,
                     else_bb,
                 );
@@ -335,6 +344,7 @@ impl<'ctx> Codegen<'ctx> {
                 Ok(branch)
             }
             TreeNode::VarAssign { name, value } => {
+                // Get variable by its name
                 let var = match self.variables.get(name) {
                     Some(var) => var,
                     None => {
@@ -345,6 +355,46 @@ impl<'ctx> Codegen<'ctx> {
 
                 let value = unwrap_or_return!(self.compile_expr(value));
                 Ok(self.builder.build_store(*var, value))
+            }
+            TreeNode::ForLoop {
+                var_name,
+                var_val,
+                cond,
+                assign,
+                body,
+            } => {
+                // Compile variable declared in the loop
+                let var_val = unwrap_or_return!(self.compile_expr(var_val));
+                self.create_var(var_name, var_val);
+
+                let loop_bb = self.context.append_basic_block(*parent, "loop");
+                let end_bb =
+                    self.context.append_basic_block(*parent, "endloop");
+
+                // Jump right through the loop
+                self.builder.build_unconditional_branch(loop_bb);
+                self.builder.position_at_end(loop_bb);
+
+                // Compile each node (line) of the loop
+                for node in body {
+                    unwrap_or_return!(self.compile_node(&parent, &node));
+                }
+                // Compile the last line, which is the assignment specified in
+                // the loop
+                unwrap_or_return!(self.compile_node(&parent, assign));
+
+                // Compile condition declared in the loop
+                let cond =
+                    unwrap_or_return!(self.compile_expr(cond)).into_int_value();
+                let branch = self
+                    .builder
+                    .build_conditional_branch(cond, loop_bb, end_bb);
+
+                self.builder.position_at_end(end_bb);
+                // Remove variable previously declared in the loop
+                self.variables.remove(var_name);
+
+                Ok(branch)
             }
             TreeNode::FunctionCall {
                 name,
@@ -395,15 +445,7 @@ impl<'ctx> Codegen<'ctx> {
             }
             TreeNode::VariableDecl { name, value } => {
                 let value = unwrap_or_return!(self.compile_expr(value));
-
-                // Create pointer
-                let ptr = self.builder.build_alloca(value.get_type(), name);
-                // Store variable in the pointer
-                self.builder.build_store(ptr, value);
-                // Save variable
-                self.variables.insert(name.clone(), ptr);
-
-                Ok(self.builder.build_store(ptr, value))
+                Ok(self.create_var(name, value))
             }
             _ => todo!(),
         }
@@ -604,11 +646,8 @@ impl<'ctx> Codegen<'ctx> {
             .expect("Error when linking.");
 
         // Execute program
-        let prog_output = Command::new(bin_path)
-            .output()
+        Command::new(bin_path)
+            .spawn()
             .expect("Couldn't run the program.");
-
-        // Print program's output
-        println!("{}", std::str::from_utf8(&prog_output.stdout).unwrap());
     }
 }

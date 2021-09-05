@@ -66,12 +66,6 @@ impl<'a> ErrorManager<'a> {
         // The line where the error occured
         let mut line = self.lines.get(error.n_line).unwrap().clone();
 
-        // Truncate error length if overflowing
-        if error.len > line.len() {
-            line.push_str(" ...");
-            error.len = line.len();
-        }
-
         // Calculate the number of spaces in the slice of code to avoid wrong
         // formatting
         let n_spaces = match &line.get(error.pos..=error.pos + error.len) {
@@ -81,6 +75,12 @@ impl<'a> ErrorManager<'a> {
 
         // Fix the number of arrows
         error.len += n_spaces;
+
+        // Truncate error length if overflowing
+        if error.len > line[error.pos..].len() {
+            line.push_str(" ...");
+            error.len = line[error.pos..].len();
+        }
 
         // Print the error
         execute!(

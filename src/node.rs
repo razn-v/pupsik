@@ -26,18 +26,31 @@ pub enum TreeNode {
     },
 
     Return(Option<TraceInfo<Box<TreeNode>>>),
+
     Condition {
         cond: TraceInfo<Box<TreeNode>>,
         then_body: NodeBlock,
         else_body: NodeBlock,
     },
+
     VariableDecl {
         name: String,
         value: TraceInfo<Box<TreeNode>>,
     },
+
     VarAssign {
         name: String,
         value: TraceInfo<Box<TreeNode>>,
+    },
+
+    ForLoop {
+        var_name: String,
+        var_val: TraceInfo<Box<TreeNode>>,
+        // Condition to meet to stop the loop
+        cond: TraceInfo<Box<TreeNode>>,
+        // Assignment executed at each iteration
+        assign: TraceInfo<Box<TreeNode>>,
+        body: NodeBlock,
     },
 
     String(String),

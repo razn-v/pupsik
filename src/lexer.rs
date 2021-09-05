@@ -225,7 +225,8 @@ impl<'a> Lexer<'a> {
         let kind = LiteralKind::String(
             string[1..string.len() - 1]
                 .to_string()
-                .replace("\\\"", "\""),
+                .replace("\\\"", "\"")
+                .replace("\\n", "\n"),
         );
 
         Ok(Token::Literal(kind))

@@ -31,6 +31,7 @@ pub enum ReservedKind {
     If,
     Else,
     Let,
+    For,
 }
 
 impl TryFrom<String> for ReservedKind {
@@ -48,6 +49,7 @@ impl TryFrom<String> for ReservedKind {
             "if"     => Ok(Self::If),
             "else"   => Ok(Self::Else),
             "let"    => Ok(Self::Let),
+            "for"    => Ok(Self::For),
             _        => Err(()),
         };
     }

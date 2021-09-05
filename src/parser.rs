@@ -121,6 +121,11 @@ impl<'a> Parser<'a> {
         self.current_token()
     }
 
+    /// Returns the next token without updating the position of the parser
+    fn peek_token(&self) -> Option<&Token> {
+        self.input.get(self.pos + 1).map(|x| x.deref())
+    }
+
     /// Returns the next parsed top-level instruction. Top-level instructions
     /// are the root nodes of the program.
     pub fn next_toplevel(&mut self) -> ParseResult {
@@ -237,13 +242,26 @@ impl<'a> Parser<'a> {
             Some(Token::Reserved(ReservedKind::Let)) => {
                 self.parse_var_decl()
             }
-            Some(Token::Identifier(_)) => self.parse_call(false),
+            Some(Token::Reserved(ReservedKind::For)) => {
+                self.parse_loop()
+            }
+            Some(Token::Identifier(_)) => {
+                if let Some(Token::Operator(OperatorKind::BinaryOperator(
+                    BinaryKind::Assign,
+                ))) = self.peek_token()
+                {
+                    self.parse_var_assign()
+                } else {
+                    self.parse_call(false)
+                }
+            }
             Some(Token::Separator(SeparatorKind::At)) => {
                 self.parse_call(true)
             }
             _ => todo!(),
         });
 
+        // Make sure line ends with a semicolon
         expect_token!(self, ParseError::ExpectedChar(';'),
             Token::Separator(SeparatorKind::Semicolon) => ());
         self.next_token();
@@ -317,6 +335,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
+        // Get variable/function name
         let name = expect_token!(self,
             ParseError::ExpectedIdentifier, Token::Identifier(x) => x.clone());
         self.next_token();
@@ -324,19 +343,25 @@ impl<'a> Parser<'a> {
         // Check if we have a function call or a variable assignment
         if self.match_token(Token::Separator(SeparatorKind::OpenParen)) {
             return self.parse_fn_call(name, is_extern);
-        } else if self.match_token(Token::Operator(
-            OperatorKind::BinaryOperator(BinaryKind::Assign),
-        )) {
-            // Skip operator
-            self.next_token();
-            let value = unwrap_or_return!(self.parse_expr());
-
-            return Ok(
-                self.get_trace(Box::new(TreeNode::VarAssign { name, value }))
-            );
         }
 
         Ok(self.get_trace(Box::new(TreeNode::VarCall(name))))
+    }
+
+    fn parse_var_assign(&mut self) -> ParseResult {
+        // Get variable name
+        let name = expect_token!(self, ParseError::ExpectedIdentifier,
+            Token::Identifier(x) => x.clone());
+        self.next_token();
+
+        expect_token!(self, ParseError::ExpectedChar('='),
+            Token::Operator(OperatorKind::BinaryOperator(BinaryKind::Assign))
+            => ());
+        self.next_token();
+
+        // Get variable value
+        let value = unwrap_or_return!(self.parse_expr());
+        Ok(self.get_trace(Box::new(TreeNode::VarAssign { name, value })))
     }
 
     /// Parses a function call
@@ -484,7 +509,7 @@ impl<'a> Parser<'a> {
 
     /// Parses a variable declaration
     fn parse_var_decl(&mut self) -> ParseResult {
-        // Skip let keyword
+        // Skip 'let' keyword
         self.next_token();
 
         // Get variable name
@@ -493,7 +518,7 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         // Make sure we have an assign operator
-        expect_token!(self,
+        expect_token!(self, ParseError::ExpectedChar('='),
             Token::Operator(OperatorKind::BinaryOperator(BinaryKind::Assign))
             => ());
         self.next_token();
@@ -501,6 +526,44 @@ impl<'a> Parser<'a> {
         // Parse variable value
         let value = unwrap_or_return!(self.parse_expr());
         Ok(self.get_trace(Box::new(TreeNode::VariableDecl { name, value })))
+    }
+
+    /// Parses a for loop
+    fn parse_loop(&mut self) -> ParseResult {
+        // Skip 'for' keyword
+        self.next_token();
+
+        // Get variable name and value
+        let (var_name, var_val) =
+            match unwrap_or_return!(self.parse_var_decl()).deref().deref() {
+                TreeNode::VariableDecl { name, value } => {
+                    (name.clone(), value.clone())
+                }
+                _ => unreachable!(),
+            };
+
+        // Make sure we have a semicolon
+        expect_token!(self, ParseError::ExpectedChar(';'),
+            Token::Separator(SeparatorKind::Semicolon) => ());
+        self.next_token();
+
+        let cond = unwrap_or_return!(self.parse_expr());
+
+        // Make sure we have a semicolon
+        expect_token!(self, ParseError::ExpectedChar(';'),
+            Token::Separator(SeparatorKind::Semicolon) => ());
+        self.next_token();
+
+        let assign = unwrap_or_return!(self.parse_var_assign());
+        let body = unwrap_or_return!(self.parse_block());
+
+        Ok(self.get_trace(Box::new(TreeNode::ForLoop {
+            var_name,
+            var_val,
+            cond,
+            assign,
+            body,
+        })))
     }
 }
 
