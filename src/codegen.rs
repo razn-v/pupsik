@@ -334,6 +334,18 @@ impl<'ctx> Codegen<'ctx> {
 
                 Ok(branch)
             }
+            TreeNode::VarAssign { name, value } => {
+                let var = match self.variables.get(name) {
+                    Some(var) => var,
+                    None => {
+                        return Err(self
+                            .get_trace(CodegenError::VariableNotFound, node))
+                    }
+                };
+
+                let value = unwrap_or_return!(self.compile_expr(value));
+                Ok(self.builder.build_store(*var, value))
+            }
             TreeNode::FunctionCall {
                 name,
                 args,

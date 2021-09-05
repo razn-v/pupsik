@@ -321,9 +321,19 @@ impl<'a> Parser<'a> {
             ParseError::ExpectedIdentifier, Token::Identifier(x) => x.clone());
         self.next_token();
 
-        // Check if we have a function call
+        // Check if we have a function call or a variable assignment
         if self.match_token(Token::Separator(SeparatorKind::OpenParen)) {
             return self.parse_fn_call(name, is_extern);
+        } else if self.match_token(Token::Operator(
+            OperatorKind::BinaryOperator(BinaryKind::Assign),
+        )) {
+            // Skip operator
+            self.next_token();
+            let value = unwrap_or_return!(self.parse_expr());
+
+            return Ok(
+                self.get_trace(Box::new(TreeNode::VarAssign { name, value }))
+            );
         }
 
         Ok(self.get_trace(Box::new(TreeNode::VarCall(name))))

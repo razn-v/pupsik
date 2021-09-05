@@ -35,6 +35,10 @@ pub enum TreeNode {
         name: String,
         value: TraceInfo<Box<TreeNode>>,
     },
+    VarAssign {
+        name: String,
+        value: TraceInfo<Box<TreeNode>>,
+    },
 
     String(String),
     Integer(i64),
@@ -42,6 +46,7 @@ pub enum TreeNode {
     Boolean(bool),
 
     VarCall(String),
+
     FunctionCall {
         name: String,
         args: Vec<TraceInfo<Box<TreeNode>>>,

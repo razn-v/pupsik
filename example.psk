@@ -1,4 +1,8 @@
 fnc main: void -> int64 {
-    @printf("%d", ~false);
+    let a = 0;
+    b = 5;
+    @printf("%d", a);
+    a = 1;
+    @printf("%d", a);
     return 0;
 }
