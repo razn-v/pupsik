@@ -39,7 +39,12 @@ fn main() {
 
     // Read file lines
     let filename = &args[1];
-    let file = File::open(filename).expect("Couldn't open file.");
+    let file = match File::open(filename) {
+        Ok(file) => file,
+        Err(_) => {
+            report_error!("Couldn't open file.");
+        }
+    };
     let lines: Vec<String> = std::io::BufReader::new(file)
         .lines()
         .map(|line| line.expect("Couldn't read line."))

@@ -1,7 +1,7 @@
 use crate::error::CompileError;
 use crate::node::TreeNode;
 use crate::token::{BinaryKind, TypeKind, UnaryKind};
-use crate::{unwrap_or_return, TraceInfo};
+use crate::{report_error, unwrap_or_return, TraceInfo};
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -634,20 +634,32 @@ impl<'ctx> Codegen<'ctx> {
 
     /// Compile LLVM IR to binary file
     pub fn write_to_file(&self, obj_path: &str, bin_path: &str) {
+        // Make sure we have a main function
+        if self.module.get_function("main").is_none() {
+            report_error!("No main function found.");
+        }
+
         // Write file object
-        self.target_machine
+        if self
+            .target_machine
             .write_to_file(&self.module, FileType::Object, Path::new(obj_path))
-            .expect("Couldn't write object to file.");
+            .is_err()
+        {
+            report_error!("Couldn't write object to file.");
+        }
 
         // Link object
-        Command::new("gcc")
+        if Command::new("gcc")
             .args(&[obj_path, "-o", bin_path])
             .output()
-            .expect("Error when linking.");
+            .is_err()
+        {
+            report_error!("Error when linking.");
+        }
 
         // Execute program
-        Command::new(bin_path)
-            .spawn()
-            .expect("Couldn't run the program.");
+        if Command::new(bin_path).spawn().is_err() {
+            report_error!("Couldn't run the program.");
+        }
     }
 }

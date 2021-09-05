@@ -8,7 +8,12 @@ use std::ops::Deref;
 #[macro_export]
 macro_rules! report_error {
     ($manager:ident, $err:expr) => {
-        $manager.report_error($err);
+        $manager.report_code_error($err);
+        std::process::exit(1);
+    };
+
+    ($err:literal) => {
+        crate::ErrorManager::report_error($err);
         std::process::exit(1);
     };
 }
@@ -59,7 +64,7 @@ impl<'a> ErrorManager<'a> {
     }
 
     /// Takes a compile `error` and prints it in pretty way
-    pub fn report_error<T: CompileError>(&self, error: TraceInfo<T>) {
+    pub fn report_code_error<T: CompileError>(&self, error: TraceInfo<T>) {
         let mut error = error;
         // Space before vertical bar
         let padding = 2 * error.n_line.to_string().len() + 1;
@@ -112,6 +117,19 @@ impl<'a> ErrorManager<'a> {
                 arrow_pos = error.pos + error.len
             )),
             ResetColor,
+        )
+        .unwrap()
+    }
+
+    /// Takes an `error` and prints it
+    pub fn report_error(error: &str) {
+        execute!(
+            std::io::stderr(),
+            SetForegroundColor(Color::Red),
+            Print("[error] "),
+            ResetColor,
+            Print(error),
+            Print("\n"),
         )
         .unwrap()
     }
