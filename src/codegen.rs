@@ -100,9 +100,15 @@ impl<'ctx> Codegen<'ctx> {
         let target = Target::from_name("x86-64").unwrap();
 
         // Create target machine
+        let triple = if cfg!(windows) { 
+            "x86_64-pc-windows-msvc" 
+        } else { 
+            "x86_64-pc-linux-gnu" 
+        };
+ 
         let target_machine = target
             .create_target_machine(
-                &TargetTriple::create("x86_64-pc-linux-gnu"),
+                &TargetTriple::create(triple),
                 "x86-64",
                 "",
                 OptimizationLevel::Default,
@@ -649,7 +655,7 @@ impl<'ctx> Codegen<'ctx> {
         }
 
         // Link object
-        if Command::new("gcc")
+        if Command::new("clang")
             .args(&[obj_path, "-o", bin_path])
             .output()
             .is_err()
