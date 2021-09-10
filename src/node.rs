@@ -35,7 +35,8 @@ pub enum TreeNode {
 
     VariableDecl {
         name: String,
-        value: TraceInfo<Box<TreeNode>>,
+        var_type: Option<TypeKind>,
+        value: Option<TraceInfo<Box<TreeNode>>>,
     },
 
     VarAssign {

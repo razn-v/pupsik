@@ -48,6 +48,8 @@ pub enum CodegenError {
     InvalidOperation,
     /// The function was used in an expression but returns nothing
     VoidFunction,
+    /// Invalid usage of void type
+    VoidType,
     /// LLVM error
     ModuleError(String),
 }
@@ -70,6 +72,7 @@ impl CompileError for CodegenError {
             CodegenError::VoidFunction => {
                 "This function is used in an expression but returns nothing"
             }
+            CodegenError::VoidType => "Void type cannot be used here",
             CodegenError::ModuleError(msg) => msg,
         }
         .into()
@@ -100,12 +103,12 @@ impl<'ctx> Codegen<'ctx> {
         let target = Target::from_name("x86-64").unwrap();
 
         // Create target machine
-        let triple = if cfg!(windows) { 
-            "x86_64-pc-windows-msvc" 
-        } else { 
-            "x86_64-pc-linux-gnu" 
+        let triple = if cfg!(windows) {
+            "x86_64-pc-windows-msvc"
+        } else {
+            "x86_64-pc-linux-gnu"
         };
- 
+
         let target_machine = target
             .create_target_machine(
                 &TargetTriple::create(triple),
@@ -149,24 +152,21 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     /// Returns a LLVM basic type from a type `kind`
-    fn get_type(
-        &self,
-        kind: &TypeKind,
-    ) -> Result<Option<BasicTypeEnum<'ctx>>, CodegenError> {
+    fn get_type(&self, kind: &TypeKind) -> Option<BasicTypeEnum<'ctx>> {
         return match kind {
-            TypeKind::Void => Ok(None),
+            TypeKind::Void => None,
             TypeKind::Int64 => {
-                Ok(Some(self.context.i64_type().as_basic_type_enum()))
+                Some(self.context.i64_type().as_basic_type_enum())
             }
             TypeKind::Bool => {
-                Ok(Some(self.context.bool_type().as_basic_type_enum()))
+                Some(self.context.bool_type().as_basic_type_enum())
             }
-            TypeKind::Str => Ok(Some(
+            TypeKind::Str => Some(
                 self.context
                     .i8_type()
                     .ptr_type(AddressSpace::Generic)
                     .as_basic_type_enum(),
-            )),
+            ),
         };
     }
 
@@ -180,21 +180,21 @@ impl<'ctx> Codegen<'ctx> {
         let ptr = self.builder.build_alloca(value.get_type(), name);
         // Save variable
         self.variables.insert(name.to_string(), ptr);
-        // Store argument in the pointer
+        // Store value in the pointer
         self.builder.build_store(ptr, value)
     }
 
     /// Resolves external function call
     fn resolve_extern_func(&self, name: &str) -> Result<(), ()> {
         match name {
-            "printf" => {
-                let str_type = self.get_type(&TypeKind::Str).unwrap().unwrap();
-                let printf_type =
+            "printf" | "scanf" => {
+                let str_type = self.get_type(&TypeKind::Str).unwrap();
+                let instr_type =
                     self.context.i32_type().fn_type(&[str_type], true);
 
                 self.module.add_function(
                     name,
-                    printf_type,
+                    instr_type,
                     Some(Linkage::External),
                 );
 
@@ -278,15 +278,12 @@ impl<'ctx> Codegen<'ctx> {
         // Get each argument type
         for arg in fn_args {
             // Identify type
-            let arg_type = unwrap_or_return!(self.get_type(&arg.0));
-            args_types.push(arg_type.unwrap());
+            let arg_type = self.get_type(&arg.0).unwrap();
+            args_types.push(arg_type);
         }
 
-        // Function return type
-        let fn_type = unwrap_or_return!(self.get_type(fn_ret));
-
         // Apply function type
-        let fn_type = match fn_type {
+        let fn_type = match self.get_type(fn_ret) {
             Some(ty) => ty.fn_type(&args_types, false),
             None => self.context.void_type().fn_type(&args_types, false),
         };
@@ -449,9 +446,30 @@ impl<'ctx> Codegen<'ctx> {
                     }
                 }
             }
-            TreeNode::VariableDecl { name, value } => {
-                let value = unwrap_or_return!(self.compile_expr(value));
-                Ok(self.create_var(name, value))
+            TreeNode::VariableDecl {
+                name,
+                var_type,
+                value,
+            } => {
+                // If variable is initialized
+                if let Some(value) = value {
+                    let value = unwrap_or_return!(self.compile_expr(value));
+                    return Ok(self.create_var(name, value));
+                }
+
+                // Make sure we have a non-void type
+                let var_type = match self.get_type(var_type.as_ref().unwrap()) {
+                    Some(ty) => ty,
+                    None => {
+                        return Err(self.get_trace(CodegenError::VoidType, node))
+                    }
+                };
+
+                // Create uninitialized variable
+                let ptr = self.builder.build_alloca(var_type, name);
+                self.variables.insert(name.to_string(), ptr);
+
+                Ok(ptr.as_instruction().unwrap())
             }
             _ => todo!(),
         }
@@ -663,9 +681,6 @@ impl<'ctx> Codegen<'ctx> {
             report_error!("Error when linking.");
         }
 
-        // Execute program
-        if Command::new(bin_path).spawn().is_err() {
-            report_error!("Couldn't run the program.");
-        }
+        println!("Program successfully compiled at: {}", bin_path);
     }
 }

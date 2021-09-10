@@ -1,6 +1,7 @@
 fnc main: void -> int64 {
-    for let i = 0; i < 10; i = i + 1 {
-        @printf("%d\n", i);
-    };
+    let int64 buffer;
+    @scanf("%d", buffer);
+    @printf("%d", buffer);
+
     return 0;
 }

@@ -86,7 +86,7 @@ fn main() {
 
     // Compile LLVM IR to binary file
     if cfg!(windows) {
-        codegen.write_to_file("./prog.obj", "./prog.exe");    
+        codegen.write_to_file("./prog.obj", "./prog.exe");
     } else {
         codegen.write_to_file("./prog.o", "./prog");
     }
