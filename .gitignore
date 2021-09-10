@@ -16,3 +16,7 @@ Cargo.lock
 
 # rustfmt
 .rustfmt.toml
+
+# pupsik output
+prog
+prog.o
