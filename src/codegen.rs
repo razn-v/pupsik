@@ -154,6 +154,9 @@ impl<'ctx> Codegen<'ctx> {
             TypeKind::Int64 => {
                 Some(self.context.i64_type().as_basic_type_enum())
             }
+            TypeKind::Float64 => {
+                Some(self.context.f64_type().as_basic_type_enum())
+            }
             TypeKind::Bool => {
                 Some(self.context.bool_type().as_basic_type_enum())
             }
@@ -611,6 +614,11 @@ impl<'ctx> Codegen<'ctx> {
                 .context
                 .i64_type()
                 .const_int(*int as u64, false)
+                .as_basic_value_enum()),
+            TreeNode::Float(float) => Ok(self
+                .context
+                .f64_type()
+                .const_float(*float)
                 .as_basic_value_enum()),
             TreeNode::Boolean(bool) => Ok(self
                 .context

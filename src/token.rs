@@ -40,17 +40,18 @@ impl TryFrom<String> for ReservedKind {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         #[rustfmt::skip]
         return match value.as_ref() {
-            "void"   => Ok(Self::VariableType(TypeKind::Void)),
-            "int64"  => Ok(Self::VariableType(TypeKind::Int64)),
-            "bool"   => Ok(Self::VariableType(TypeKind::Bool)),
-            "str"    => Ok(Self::VariableType(TypeKind::Str)),
-            "fnc"    => Ok(Self::FunctionDecl),
-            "return" => Ok(Self::Return),
-            "if"     => Ok(Self::If),
-            "else"   => Ok(Self::Else),
-            "let"    => Ok(Self::Let),
-            "for"    => Ok(Self::For),
-            _        => Err(()),
+            "void"    => Ok(Self::VariableType(TypeKind::Void)),
+            "int64"   => Ok(Self::VariableType(TypeKind::Int64)),
+            "float64" => Ok(Self::VariableType(TypeKind::Float64)),
+            "bool"    => Ok(Self::VariableType(TypeKind::Bool)),
+            "str"     => Ok(Self::VariableType(TypeKind::Str)),
+            "fnc"     => Ok(Self::FunctionDecl),
+            "return"  => Ok(Self::Return),
+            "if"      => Ok(Self::If),
+            "else"    => Ok(Self::Else),
+            "let"     => Ok(Self::Let),
+            "for"     => Ok(Self::For),
+            _         => Err(()),
         };
     }
 }
@@ -60,6 +61,7 @@ impl TryFrom<String> for ReservedKind {
 pub enum TypeKind {
     Void,
     Int64,
+    Float64,
     Bool,
     Str,
 }
