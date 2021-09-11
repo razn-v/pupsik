@@ -276,7 +276,7 @@ impl<'a> Lexer<'a> {
     /// Returns true if the current char is a space, spaces are not tokenized
     /// by the lexer but rather ignored
     fn is_space(&self) -> bool {
-        self.current_char().unwrap() == ' '
+        self.current_char().unwrap().is_ascii_whitespace()
     }
 
     /// Returns true if the current char is a letter from the alphabet or is an
