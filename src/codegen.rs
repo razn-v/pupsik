@@ -395,8 +395,8 @@ impl<'ctx> Codegen<'ctx> {
                 match var.deref().deref() {
                     TreeNode::VariableDecl {
                         name,
-                        var_type,
-                        value,
+                        var_type: _,
+                        value: _,
                     } => {
                         self.variables.remove(name);
                     }
@@ -472,9 +472,8 @@ impl<'ctx> Codegen<'ctx> {
 
                 // If the variable is initialized
                 if let Some(val) = value {
-                    final_value = Some(unwrap_or_return!(
-                        self.compile_expr(value.as_ref().unwrap())
-                    ));
+                    final_value =
+                        Some(unwrap_or_return!(self.compile_expr(val)));
 
                     // Get value type as variable type if not defined
                     if final_type.is_none() {

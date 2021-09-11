@@ -11,15 +11,6 @@ use std::ops::Deref;
 /// Returns `result` if the current token type is equal to `type`, otherwise
 /// throws an error
 macro_rules! expect_token {
-    // Error not specified
-    ($self:ident, $type:pat => $result:expr) => {
-        match $self.current_token() {
-            Some($type) => $result,
-            _ => return Err($self.get_trace(ParseError::UnexpectedToken)),
-        };
-    };
-
-    // Error specified
     ($self:ident, $error:expr, $type:pat => $result:expr) => {
         match $self.current_token() {
             Some($type) => $result,
@@ -52,8 +43,6 @@ pub enum ParseError {
     ExpectedArrow,
     /// Expected a type but got something else
     ExpectedType,
-    /// The variable was uninitialized
-    ExpectedInitialized,
 }
 
 impl CompileError for ParseError {
@@ -72,9 +61,6 @@ impl CompileError for ParseError {
             }
             ParseError::ExpectedArrow => "Expected '->' after this",
             ParseError::ExpectedType => "Expected a valid type after this",
-            ParseError::ExpectedInitialized => {
-                "Expected an initialized variable after this"
-            }
         }
         .into()
     }
@@ -539,7 +525,9 @@ impl<'a> Parser<'a> {
         // Get variable value if variable type is not specified or if assign
         // operator is present
         if var_type.is_none() || self.match_token(assign_op) {
-            expect_token!(self, ParseError::ExpectedChar('='), assign_op => ());
+            expect_token!(self, ParseError::ExpectedChar('='),
+                Token::Operator(OperatorKind::BinaryOperator(BinaryKind::Assign)
+                ) => ());
             self.next_token();
             // Parse variable value
             value = Some(unwrap_or_return!(self.parse_expr()));
