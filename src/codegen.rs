@@ -1,5 +1,5 @@
 use crate::error::CompileError;
-use crate::node::TreeNode;
+use crate::node::{TracedNode, TreeNode};
 use crate::token::{BinaryKind, TypeKind, UnaryKind};
 use crate::{report_error, unwrap_or_return, TraceInfo};
 
@@ -131,11 +131,7 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     /// Get trace info of `value`
-    fn get_trace<T>(
-        &self,
-        value: T,
-        node: &TraceInfo<Box<TreeNode>>,
-    ) -> TraceInfo<T> {
+    fn get_trace<T>(&self, value: T, node: &TracedNode) -> TraceInfo<T> {
         TraceInfo::new(value, node.n_line, node.pos, node.len)
     }
 
@@ -174,14 +170,16 @@ impl<'ctx> Codegen<'ctx> {
     fn create_var(
         &mut self,
         name: &str,
-        value: BasicValueEnum<'ctx>,
+        var_type: BasicTypeEnum<'ctx>,
+        value: Option<BasicValueEnum<'ctx>>,
     ) -> InstructionValue<'ctx> {
         // Create pointer
-        let ptr = self.builder.build_alloca(value.get_type(), name);
+        let ptr = self.builder.build_alloca(var_type, name);
         // Save variable
         self.variables.insert(name.to_string(), ptr);
-        // Store value in the pointer
-        self.builder.build_store(ptr, value)
+        // Store variable value in the pointer
+        self.builder
+            .build_store(ptr, value.unwrap_or(var_type.const_zero()))
     }
 
     /// Resolves external function call
@@ -207,7 +205,7 @@ impl<'ctx> Codegen<'ctx> {
     /// Compiles a given function's content and prototype
     pub fn compile_func(
         &mut self,
-        func: &TraceInfo<Box<TreeNode>>,
+        func: &TracedNode,
     ) -> CodegenResult<FunctionValue> {
         // Extract function attributes from the node
         let (fn_name, fn_args, fn_ret, fn_body) = match func.deref().deref() {
@@ -239,7 +237,7 @@ impl<'ctx> Codegen<'ctx> {
         // Build each argument of the function
         for (i, arg) in fn_proto.get_param_iter().enumerate() {
             let arg_name = &fn_args[i].1;
-            self.create_var(arg_name, arg);
+            self.create_var(arg_name, arg.get_type(), Some(arg));
         }
 
         // Compile each node (line) of the function
@@ -302,7 +300,7 @@ impl<'ctx> Codegen<'ctx> {
     pub fn compile_node(
         &mut self,
         parent: &FunctionValue,
-        node: &TraceInfo<Box<TreeNode>>,
+        node: &TracedNode,
     ) -> CodegenResult<InstructionValue<'ctx>> {
         match node.deref().deref() {
             TreeNode::Return(expr) => {
@@ -360,15 +358,13 @@ impl<'ctx> Codegen<'ctx> {
                 Ok(self.builder.build_store(*var, value))
             }
             TreeNode::ForLoop {
-                var_name,
-                var_val,
+                var,
                 cond,
                 assign,
                 body,
             } => {
                 // Compile variable declared in the loop
-                let var_val = unwrap_or_return!(self.compile_expr(var_val));
-                self.create_var(var_name, var_val);
+                unwrap_or_return!(self.compile_node(parent, var));
 
                 let loop_bb = self.context.append_basic_block(*parent, "loop");
                 let end_bb =
@@ -394,8 +390,18 @@ impl<'ctx> Codegen<'ctx> {
                     .build_conditional_branch(cond, loop_bb, end_bb);
 
                 self.builder.position_at_end(end_bb);
+
                 // Remove variable previously declared in the loop
-                self.variables.remove(var_name);
+                match var.deref().deref() {
+                    TreeNode::VariableDecl {
+                        name,
+                        var_type,
+                        value,
+                    } => {
+                        self.variables.remove(name);
+                    }
+                    _ => unreachable!(),
+                }
 
                 Ok(branch)
             }
@@ -451,25 +457,32 @@ impl<'ctx> Codegen<'ctx> {
                 var_type,
                 value,
             } => {
-                // If variable is initialized
-                if let Some(value) = value {
-                    let value = unwrap_or_return!(self.compile_expr(value));
-                    return Ok(self.create_var(name, value));
+                // Make sure we have a non-void type
+                if let Some(TypeKind::Void) = var_type {
+                    return Err(self.get_trace(CodegenError::VoidType, node));
                 }
 
-                // Make sure we have a non-void type
-                let var_type = match self.get_type(var_type.as_ref().unwrap()) {
-                    Some(ty) => ty,
-                    None => {
-                        return Err(self.get_trace(CodegenError::VoidType, node))
+                let mut final_type = None;
+                let mut final_value = None;
+
+                // If the variable type is specified, take it
+                if let Some(ty) = var_type {
+                    final_type = Some(self.get_type(ty).unwrap());
+                }
+
+                // If the variable is initialized
+                if let Some(val) = value {
+                    final_value = Some(unwrap_or_return!(
+                        self.compile_expr(value.as_ref().unwrap())
+                    ));
+
+                    // Get value type as variable type if not defined
+                    if final_type.is_none() {
+                        final_type = Some(final_value.unwrap().get_type());
                     }
-                };
+                }
 
-                // Create uninitialized variable
-                let ptr = self.builder.build_alloca(var_type, name);
-                self.variables.insert(name.to_string(), ptr);
-
-                Ok(ptr.as_instruction().unwrap())
+                Ok(self.create_var(name, final_type.unwrap(), final_value))
             }
             _ => todo!(),
         }
@@ -478,7 +491,7 @@ impl<'ctx> Codegen<'ctx> {
     /// Compiles an expression
     pub fn compile_expr(
         &self,
-        expr: &TraceInfo<Box<TreeNode>>,
+        expr: &TracedNode,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         match expr.deref().deref() {
             TreeNode::BinaryOp {

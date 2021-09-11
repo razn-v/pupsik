@@ -66,8 +66,6 @@ impl<'a> ErrorManager<'a> {
     /// Takes a compile `error` and prints it in pretty way
     pub fn report_code_error<T: CompileError>(&self, error: TraceInfo<T>) {
         let mut error = error;
-        // Space before vertical bar
-        let padding = 2 * error.n_line.to_string().len() + 1;
         // The line where the error occured
         let mut line = self.lines.get(error.n_line).unwrap().clone();
 
@@ -89,6 +87,10 @@ impl<'a> ErrorManager<'a> {
             error.len = 1;
         }
 
+        let middle_bar = format!("{} | ", error.n_line + 1);
+        // Space before vertical bar
+        let padding = middle_bar.len() - 1;
+
         // Print the error
         execute!(
             std::io::stderr(),
@@ -103,8 +105,9 @@ impl<'a> ErrorManager<'a> {
             )),
             SetForegroundColor(Color::Grey),
             SetAttribute(Attribute::Bold),
-            Print(format!("{:>padding$}\n", "|", padding = padding)),
-            Print(format!("{} | ", error.n_line + 1)),
+            Print(format!("{:>padding$} ", "|", padding = padding)),
+            Print("\n"),
+            Print(middle_bar),
             ResetColor,
             Print(format!("{}\n", line)),
             SetForegroundColor(Color::Grey),

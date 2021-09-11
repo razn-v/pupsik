@@ -1,5 +1,5 @@
 use crate::error::CompileError;
-use crate::node::TreeNode;
+use crate::node::{TracedNode, TreeNode};
 use crate::token::{
     BinaryKind, LiteralKind, OperatorKind, ReservedKind, SeparatorKind, Token,
     TypeKind,
@@ -80,7 +80,7 @@ impl CompileError for ParseError {
     }
 }
 
-type ParseResult = Result<TraceInfo<Box<TreeNode>>, TraceInfo<ParseError>>;
+type ParseResult = Result<TracedNode, TraceInfo<ParseError>>;
 
 impl<'a> Parser<'a> {
     pub fn new(input: &'a Vec<TraceInfo<Token>>) -> Self {
@@ -212,13 +212,13 @@ impl<'a> Parser<'a> {
     /// Parses a block. A block is a list of nodes.
     fn parse_block(
         &mut self,
-    ) -> Result<Vec<TraceInfo<Box<TreeNode>>>, TraceInfo<ParseError>> {
+    ) -> Result<Vec<TracedNode>, TraceInfo<ParseError>> {
         expect_token!(self, ParseError::ExpectedChar('{'),
             Token::Separator(SeparatorKind::OpenBrace) => ());
         self.next_token();
 
         // Loop over and parse each line (node) of the block
-        let mut nodes = Vec::<TraceInfo<Box<TreeNode>>>::new();
+        let mut nodes = Vec::<TracedNode>::new();
 
         // While the current token is not a close brace, we have nodes left
         while !self.match_token(Token::Separator(SeparatorKind::CloseBrace)) {
@@ -245,14 +245,7 @@ impl<'a> Parser<'a> {
                 self.parse_if_expr()
             }
             Some(Token::Reserved(ReservedKind::Let)) => {
-                // Either initialized or uninitialized variable declaration
-                if let Some(Token::Reserved(ReservedKind::VariableType(_))) =
-                    self.peek_token()
-                {
-                    self.parse_unit_decl()
-                } else {
-                    self.parse_var_decl()
-                }
+                self.parse_var_decl()
             }
             Some(Token::Reserved(ReservedKind::For)) => {
                 self.parse_loop()
@@ -383,7 +376,7 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         // Parse arguments passed to the function call
-        let mut args = Vec::<TraceInfo<Box<TreeNode>>>::new();
+        let mut args = Vec::<TracedNode>::new();
 
         // While the current token is not a close parenthesis, we have arguments
         // to parse
@@ -427,7 +420,7 @@ impl<'a> Parser<'a> {
     fn parse_binop(
         &mut self,
         expr_prec: isize,
-        left_hand: &mut TraceInfo<Box<TreeNode>>,
+        left_hand: &mut TracedNode,
     ) -> ParseResult {
         loop {
             // Make sure we have a binary operator, otherwise return left hand
@@ -525,45 +518,37 @@ impl<'a> Parser<'a> {
         // Skip 'let' keyword
         self.next_token();
 
+        // Check if variable type is specified
+        let mut var_type = None;
+        if let Some(Token::Reserved(ReservedKind::VariableType(ty))) =
+            self.current_token()
+        {
+            var_type = Some(ty.clone());
+            self.next_token();
+        }
+
         // Get variable name
         let name = expect_token!(self,
             ParseError::ExpectedIdentifier, Token::Identifier(x) => x.clone());
         self.next_token();
 
-        // Make sure we have an assign operator
-        expect_token!(self, ParseError::ExpectedChar('='),
-            Token::Operator(OperatorKind::BinaryOperator(BinaryKind::Assign))
-            => ());
-        self.next_token();
+        let mut value = None;
+        let assign_op =
+            Token::Operator(OperatorKind::BinaryOperator(BinaryKind::Assign));
 
-        // Parse variable value
-        let value = Some(unwrap_or_return!(self.parse_expr()));
+        // Get variable value if variable type is not specified or if assign
+        // operator is present
+        if var_type.is_none() || self.match_token(assign_op) {
+            expect_token!(self, ParseError::ExpectedChar('='), assign_op => ());
+            self.next_token();
+            // Parse variable value
+            value = Some(unwrap_or_return!(self.parse_expr()));
+        }
+
         Ok(self.get_trace(Box::new(TreeNode::VariableDecl {
             name,
-            var_type: None,
+            var_type,
             value,
-        })))
-    }
-
-    /// Parses an uninitialized variable declaration
-    fn parse_unit_decl(&mut self) -> ParseResult {
-        // Skip 'let' keyword
-        self.next_token();
-
-        // Get variable type
-        let var_type = expect_token!(self, ParseError::ExpectedType,
-            Token::Reserved(ReservedKind::VariableType(x)) => x.clone());
-        self.next_token();
-
-        // Get variable name
-        let name = expect_token!(self, ParseError::ExpectedIdentifier,
-                    Token::Identifier(x) => x.clone());
-        self.next_token();
-
-        Ok(self.get_trace(Box::new(TreeNode::VariableDecl {
-            name,
-            var_type: Some(var_type.clone()),
-            value: None,
         })))
     }
 
@@ -572,27 +557,15 @@ impl<'a> Parser<'a> {
         // Skip 'for' keyword
         self.next_token();
 
-        // Get variable name and value
-        let (var_name, var_val, var_type) =
-            match unwrap_or_return!(self.parse_var_decl()).deref().deref() {
-                TreeNode::VariableDecl {
-                    name,
-                    value,
-                    var_type,
-                } => (name.clone(), value.clone(), var_type.clone()),
-                _ => unreachable!(),
-            };
-
-        // Check if variable is uninitialized
-        if var_type.is_some() {
-            return Err(self.get_trace(ParseError::ExpectedInitialized));
-        }
+        // Get variabled declared in the loop
+        let var = unwrap_or_return!(self.parse_var_decl());
 
         // Make sure we have a semicolon
         expect_token!(self, ParseError::ExpectedChar(';'),
             Token::Separator(SeparatorKind::Semicolon) => ());
         self.next_token();
 
+        // Get condition declared in the loop
         let cond = unwrap_or_return!(self.parse_expr());
 
         // Make sure we have a semicolon
@@ -604,8 +577,7 @@ impl<'a> Parser<'a> {
         let body = unwrap_or_return!(self.parse_block());
 
         Ok(self.get_trace(Box::new(TreeNode::ForLoop {
-            var_name,
-            var_val: var_val.unwrap(),
+            var,
             cond,
             assign,
             body,

@@ -1,7 +1,8 @@
 use crate::token::{BinaryKind, TypeKind, UnaryKind};
 use crate::TraceInfo;
 
-type NodeBlock = Vec<TraceInfo<Box<TreeNode>>>;
+type NodeBlock = Vec<TracedNode>;
+pub type TracedNode = TraceInfo<Box<TreeNode>>;
 
 /// A list specifying categories of instructions and types used by the language
 #[derive(Debug, Clone)]
@@ -16,19 +17,19 @@ pub enum TreeNode {
 
     BinaryOp {
         operator: BinaryKind,
-        left: TraceInfo<Box<TreeNode>>,
-        right: TraceInfo<Box<TreeNode>>,
+        left: TracedNode,
+        right: TracedNode,
     },
 
     UnaryOp {
         operator: UnaryKind,
-        value: TraceInfo<Box<TreeNode>>,
+        value: TracedNode,
     },
 
-    Return(Option<TraceInfo<Box<TreeNode>>>),
+    Return(Option<TracedNode>),
 
     Condition {
-        cond: TraceInfo<Box<TreeNode>>,
+        cond: TracedNode,
         then_body: NodeBlock,
         else_body: NodeBlock,
     },
@@ -36,21 +37,20 @@ pub enum TreeNode {
     VariableDecl {
         name: String,
         var_type: Option<TypeKind>,
-        value: Option<TraceInfo<Box<TreeNode>>>,
+        value: Option<TracedNode>,
     },
 
     VarAssign {
         name: String,
-        value: TraceInfo<Box<TreeNode>>,
+        value: TracedNode,
     },
 
     ForLoop {
-        var_name: String,
-        var_val: TraceInfo<Box<TreeNode>>,
+        var: TracedNode,
         // Condition to meet to stop the loop
-        cond: TraceInfo<Box<TreeNode>>,
+        cond: TracedNode,
         // Assignment executed at each iteration
-        assign: TraceInfo<Box<TreeNode>>,
+        assign: TracedNode,
         body: NodeBlock,
     },
 
@@ -63,7 +63,7 @@ pub enum TreeNode {
 
     FunctionCall {
         name: String,
-        args: Vec<TraceInfo<Box<TreeNode>>>,
+        args: Vec<TracedNode>,
         is_extern: bool,
     },
 }
