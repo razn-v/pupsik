@@ -115,7 +115,7 @@ impl<'a> Lexer<'a> {
         // thus allow us to know the start and the end of the token.
         self.token_pos = self.pos;
 
-        if self.is_eof() {
+        if self.is_eof() || self.is_comment() {
             return Err(LexError::EOF);
         } else if self.is_space() {
             // Skip space
@@ -265,6 +265,12 @@ impl<'a> Lexer<'a> {
     /// characters left
     fn is_eof(&self) -> bool {
         self.current_char().is_none()
+    }
+
+    /// Returns true if the part left of the line is a comment
+    fn is_comment(&mut self) -> bool {
+        self.current_char().unwrap() == '/'
+            && self.next_char(false) == Some('/')
     }
 
     /// Returns true if the current char is a space, spaces are not tokenized

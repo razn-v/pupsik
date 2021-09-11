@@ -1,7 +1,5 @@
 fnc main: void -> int64 {
-    let int64 buffer;
-    @scanf("%d", buffer);
-    @printf("%d", buffer);
-
+    // Print hello world to the screen
+    @printf("Hello, world!");
     return 0;
 }
