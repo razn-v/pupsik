@@ -85,6 +85,8 @@ impl<'a> ErrorManager<'a> {
         if error.len > line[error.pos..].len() {
             line.push_str(" ...");
             error.len = line[error.pos..].len();
+        } else if error.len == 0 {
+            error.len = 1;
         }
 
         // Print the error

@@ -271,7 +271,7 @@ impl<'a> Parser<'a> {
             Some(Token::Separator(SeparatorKind::At)) => {
                 self.parse_call(true)
             }
-            _ => todo!(),
+            _ => return Err(self.get_trace(ParseError::UnexpectedToken)),
         });
 
         // Make sure line ends with a semicolon
