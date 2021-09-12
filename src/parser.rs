@@ -2,7 +2,7 @@ use crate::error::CompileError;
 use crate::node::{TracedNode, TreeNode};
 use crate::token::{
     BinaryKind, LiteralKind, OperatorKind, ReservedKind, SeparatorKind, Token,
-    TypeKind,
+    TypeKind, UnaryKind,
 };
 use crate::{unwrap_or_return, TraceInfo};
 
@@ -289,8 +289,11 @@ impl<'a> Parser<'a> {
                 self.parse_paren_expr()
             }
             Some(Token::Operator(OperatorKind::UnaryOperator(_))) => {
-                self.parse_unop()
+                self.parse_unop(false)
             }
+            Some(Token::Operator(OperatorKind::BinaryOperator(
+                BinaryKind::Sub,
+            ))) => self.parse_unop(true),
             _ => Err(self.get_trace(ParseError::UnexpectedToken)),
         };
 
@@ -450,10 +453,19 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses an unary operation
-    fn parse_unop(&mut self) -> ParseResult {
-        // Get operator
-        let unop = expect_token!(self, ParseError::ExpectedIdentifier,
-            Token::Operator(OperatorKind::UnaryOperator(x)) => x.clone());
+    fn parse_unop(&mut self, is_neg: bool) -> ParseResult {
+        let unop;
+
+        // If we have a sub operator without a left hand, `is_neg` will be true.
+        // This means that we should treat it as an unary operator.
+        if is_neg {
+            unop = UnaryKind::Not;
+        } else {
+            // Get operator
+            unop = expect_token!(self, ParseError::ExpectedIdentifier,
+                Token::Operator(OperatorKind::UnaryOperator(x)) => x.clone());
+        }
+
         self.next_token();
 
         let value = unwrap_or_return!(self.parse_expr());
