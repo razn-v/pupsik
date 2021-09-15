@@ -64,6 +64,7 @@ fn main() {
             .map(|(j, chr)| TraceInfo::new(chr, i, j, 1))
             .collect();
 
+        // Lex each line and save the produced tokens
         for token in Lexer::new(&traced_line) {
             if token.is_err() {
                 report_error!(err_manager, token.unwrap_err());
@@ -86,7 +87,7 @@ fn main() {
 
     // Compile LLVM IR to binary file
     if cfg!(windows) {
-        codegen.write_to_file("./prog.obj", "./prog.exe");
+        codegen.write_to_file(".\\prog.obj", ".\\prog.exe");
     } else {
         codegen.write_to_file("./prog.o", "./prog");
     }

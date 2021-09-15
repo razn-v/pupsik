@@ -20,3 +20,5 @@ Cargo.lock
 # pupsik output
 prog
 prog.o
+prog.exe
+prog.obj

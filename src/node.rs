@@ -1,7 +1,6 @@
 use crate::token::{BinaryKind, TypeKind, UnaryKind};
 use crate::TraceInfo;
 
-type NodeBlock = Vec<TracedNode>;
 pub type TracedNode = TraceInfo<Box<TreeNode>>;
 
 /// A list specifying categories of instructions and types used by the language
@@ -12,7 +11,7 @@ pub enum TreeNode {
         // (argument type, argument name)
         args: Vec<(TypeKind, String)>,
         ret: TypeKind,
-        body: NodeBlock,
+        body: Vec<TracedNode>,
     },
 
     BinaryOp {
@@ -30,8 +29,8 @@ pub enum TreeNode {
 
     Condition {
         cond: TracedNode,
-        then_body: NodeBlock,
-        else_body: NodeBlock,
+        then_body: Vec<TracedNode>,
+        else_body: Vec<TracedNode>,
     },
 
     VariableDecl {
@@ -51,7 +50,7 @@ pub enum TreeNode {
         cond: TracedNode,
         // Assignment executed at each iteration
         assign: TracedNode,
-        body: NodeBlock,
+        body: Vec<TracedNode>,
     },
 
     String(String),
