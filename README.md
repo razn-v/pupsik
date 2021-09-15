@@ -1,7 +1,7 @@
 # pupsik
 
 Pupsik is a statically typed programming language.
-It is not meant to be used in serious projects but rather to show how to make a compiled language using LLVM and Rust. Indeed, the language is lacking multiple features and would not be appropriate to use in serious projects. The source code is documented so that you can always refer to it if you want to make your own language.
+It is not meant to be used in serious projects but rather to show how to make a compiled language using LLVM and Rust. Indeed, the language is lacking multiple features and would not be appropriate to be used in daily projects. The source code is documented so that you can always refer to it if you want to make your own language.
 
 # Prerequisites
 
